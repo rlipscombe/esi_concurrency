@@ -1,4 +1,4 @@
--module(httpc_tests).
+-module(hackney_tests).
 -include_lib("eunit/include/eunit.hrl").
 
 httpd_test_() ->
@@ -8,11 +8,8 @@ httpd_test_() ->
             fun concurrent_requests/1
         ]}}.
 
--define(PROFILE, ?MODULE).
-
 setup() ->
-    {ok, _} = inets:start(httpc, [{profile, ?PROFILE}]),
-    ok = httpc:set_options([{max_sessions, 5}], ?PROFILE),
+    {ok, _} = application:ensure_all_started(hackney),
     test_helper:start_httpd().
 
 cleanup(Config) ->
@@ -22,7 +19,7 @@ pause(_Config = #{base_url := BaseUrl}) ->
     Url = BaseUrl ++ "esi/esi_module:pause",
     ?debugMsg(Url),
 
-    {ok, {{_, 200, _}, _, _}} = httpc:request(get, {Url, []}, [], [], ?PROFILE),
+    {ok, 200, _, _} = hackney:get(Url, [], <<>>, [with_body]),
     ok.
 
 concurrent_requests(_Config = #{base_url := BaseUrl}) ->
@@ -37,7 +34,7 @@ concurrent_requests(_Config = #{base_url := BaseUrl}) ->
                 % TODO: These complete sequentially. When I point them at a cowboy server, they complete in parallel;
                 % this suggests that it's a problem with httpd or mod_esi. I wonder whether the mod_esi callback is blocked by the sleep.
                 ?debugMsg("making request"),
-                Result = httpc:request(get, {Url, []}, [], [], ?PROFILE),
+                Result = hackney:get(Url, [], <<>>, [with_body]),
                 Parent ! {self(), Result}
             end)
         end,
@@ -53,7 +50,7 @@ assert_requests(Requests) ->
     receive
         {Pid, Result} when is_pid(Pid) ->
             ?debugMsg("completed"),
-            {ok, {{_, 200, _}, _, _}} = Result,
+            {ok, 200, _, _} = Result,
             assert_requests(lists:delete(Pid, Requests))
     end,
     ok.
